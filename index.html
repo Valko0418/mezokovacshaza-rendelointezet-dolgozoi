@@ -13,22 +13,24 @@
      Csere ki a saját Firebase projekt adataiddal!
      Firebase Console → Project Settings → Your apps → SDK setup
      ===================================================== -->
-<script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-  import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged }
-    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-  import { getFirestore, collection, getDocs, addDoc, doc, getDoc, setDoc, query, orderBy, serverTimestamp }
-    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+// Import the functions you need from the SDKs you need
+import { initializeApp } from "firebase/app";
+// TODO: Add SDKs for Firebase products that you want to use
+// https://firebase.google.com/docs/web/setup#available-libraries
 
-  // ⚠️ ITT ADD MEG A SAJÁT FIREBASE CONFIG-OD:
-  const firebaseConfig = {
-    apiKey: "AIzaSy...",
-    authDomain: "rendelo-xxxxx.firebaseapp.com",
-    projectId: "rendelo-xxxxx",
-    storageBucket: "rendelo-xxxxx.appspot.com",
-    messagingSenderId: "000000000000",
-    appId: "1:000000000000:web:xxxxxxxxxxxxxxxx"
-  };
+// Your web app's Firebase configuration
+const firebaseConfig = {
+  apiKey: "AIzaSyDjkduXh2dCtwVbrRJwWzFrFtXlkxjKqc0",
+  authDomain: "mezokovacshaza-rendelo-portal.firebaseapp.com",
+  projectId: "mezokovacshaza-rendelo-portal",
+  storageBucket: "mezokovacshaza-rendelo-portal.firebasestorage.app",
+  messagingSenderId: "952677951418",
+  appId: "1:952677951418:web:e8b8c1042dfca3ab7b1f83"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+  
 
   // =====================================================
   // FIRESTORE ADATBÁZIS STRUKTÚRA (ajánlott):
