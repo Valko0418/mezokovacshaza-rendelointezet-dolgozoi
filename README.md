@@ -1,1 +1,0 @@
-# mezokovacshaza-rendelointezet-dolgozoi
