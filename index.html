@@ -7,31 +7,33 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-
+ 
 <!-- =====================================================
      FIREBASE KONFIGURÁCIÓ
      Csere ki a saját Firebase projekt adataiddal!
      Firebase Console → Project Settings → Your apps → SDK setup
      ===================================================== -->
-// Import the functions you need from the SDKs you need
-import { initializeApp } from "firebase/app";
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
-
-// Your web app's Firebase configuration
-const firebaseConfig = {
-  apiKey: "AIzaSyDjkduXh2dCtwVbrRJwWzFrFtXlkxjKqc0",
-  authDomain: "mezokovacshaza-rendelo-portal.firebaseapp.com",
-  projectId: "mezokovacshaza-rendelo-portal",
-  storageBucket: "mezokovacshaza-rendelo-portal.firebasestorage.app",
-  messagingSenderId: "952677951418",
-  appId: "1:952677951418:web:e8b8c1042dfca3ab7b1f83"
-};
-
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-  
-
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged }
+    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+  import { getFirestore, collection, getDocs, addDoc, doc, getDoc, setDoc, query, orderBy, serverTimestamp }
+    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+ 
+  // Firebase konfiguráció
+  const firebaseConfig = {
+    apiKey: "AIzaSyDjkduXh2dCtwVbrRJwWzFrFtXlkxjKqc0",
+    authDomain: "mezokovacshaza-rendelo-portal.firebaseapp.com",
+    projectId: "mezokovacshaza-rendelo-portal",
+    storageBucket: "mezokovacshaza-rendelo-portal.firebasestorage.app",
+    messagingSenderId: "952677951418",
+    appId: "1:952677951418:web:e8b8c1042dfca3ab7b1f83"
+  };
+ 
+  // Előre regisztrált intézményvezető fiók (automatikus profil létrehozás)
+  const ADMIN_UID   = "TKiBlBGtmHMRFs5JydhsBcZF1nH2";
+  const ADMIN_EMAIL = "tva20080912@gmail.com";
+ 
   // =====================================================
   // FIRESTORE ADATBÁZIS STRUKTÚRA (ajánlott):
   //
@@ -70,11 +72,11 @@ const app = initializeApp(firebaseConfig);
   //   }
   // }
   // =====================================================
-
+ 
   const app = initializeApp(firebaseConfig);
   const auth = getAuth(app);
   const db = getFirestore(app);
-
+ 
   const ROLE_CONFIG = {
     admin:      { label: 'Admin / IT',            initials: 'AD', pages: ['dashboard','patients','ambulans','zarojelentes','labor','kepalkoto','beutalo','accounts','aktak'] },
     intvez:     { label: 'Intézményvezető',        initials: 'IV', pages: ['dashboard','patients','ambulans','zarojelentes','labor','kepalkoto','beutalo','accounts','aktak'] },
@@ -85,7 +87,7 @@ const app = initializeApp(firebaseConfig);
     nover:      { label: 'Nővér',                 initials: 'NŐ', pages: ['dashboard','patients','labor'] },
     szemelyzet: { label: 'Szakszemélyzet',        initials: 'SZ', pages: ['dashboard','labor','kepalkoto'] }
   };
-
+ 
   // Magyar Firebase hibaüzenetek
   function fbError(code) {
     const msgs = {
@@ -99,20 +101,20 @@ const app = initializeApp(firebaseConfig);
     };
     return msgs[code] || `Ismeretlen hiba: ${code}`;
   }
-
+ 
   // ---- LOGIN ----
   window.doLogin = async function() {
     const email = document.getElementById('loginEmail').value.trim();
     const pass  = document.getElementById('loginPass').value;
     const btn   = document.getElementById('loginBtn');
     const errEl = document.getElementById('loginError');
-
+ 
     if (!email || !pass) { errEl.textContent = 'Töltsd ki az összes mezőt.'; errEl.style.display='flex'; return; }
-
+ 
     btn.disabled = true;
     btn.innerHTML = '<i class="ti ti-loader spin"></i> Belépés...';
     errEl.style.display = 'none';
-
+ 
     try {
       const cred = await signInWithEmailAndPassword(auth, email, pass);
       // sikeres → onAuthStateChanged kezeli
@@ -123,11 +125,11 @@ const app = initializeApp(firebaseConfig);
       btn.innerHTML = '<i class="ti ti-login"></i> Belépés';
     }
   };
-
+ 
   window.doLogout = async function() {
     await signOut(auth);
   };
-
+ 
   // Enter gomb a login formon
   document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('loginPass').addEventListener('keydown', e => {
@@ -136,40 +138,61 @@ const app = initializeApp(firebaseConfig);
     updateClock();
     setInterval(updateClock, 1000);
   });
-
+ 
   // ---- AUTH STATE ----
   onAuthStateChanged(auth, async (user) => {
     if (user) {
       // Lekérjük a Firestore-ból a szerepkört
       try {
-        const snap = await getDoc(doc(db, 'users', user.uid));
+        const userRef = doc(db, 'users', user.uid);
+        const snap = await getDoc(userRef);
         let role = 'orvos', displayName = user.displayName || user.email, department = '';
-
+ 
         if (snap.exists()) {
           const d = snap.data();
           role        = d.role        || 'orvos';
           displayName = d.name        || displayName;
           department  = d.department  || '';
           // lastLogin frissítése
-          await setDoc(doc(db, 'users', user.uid), { lastLogin: serverTimestamp() }, { merge: true });
+          await setDoc(userRef, { lastLogin: serverTimestamp() }, { merge: true });
+        } else if (user.uid === ADMIN_UID) {
+          // Ha az intézményvezető fióknak még nincs Firestore profilja, automatikusan létrehozzuk
+          const adminProfile = {
+            name:       'Intézményvezető',
+            email:      ADMIN_EMAIL,
+            role:       'intvez',
+            department: 'Vezetőség',
+            active:     true,
+            createdAt:  serverTimestamp(),
+            lastLogin:  serverTimestamp()
+          };
+          await setDoc(userRef, adminProfile);
+          role        = 'intvez';
+          displayName = 'Intézményvezető';
+          department  = 'Vezetőség';
+        } else {
+          // Ismeretlen felhasználó, nincs profil → kiléptetjük
+          showToast('Nincs jogosultsága a rendszerhez. Kérje az adminisztrátort.', 'danger');
+          await signOut(auth);
+          return;
         }
-
+ 
         const rc = ROLE_CONFIG[role] || ROLE_CONFIG.orvos;
         document.getElementById('loginScreen').style.display = 'none';
         const mainApp = document.getElementById('mainApp');
         mainApp.style.display = 'flex';
-
+ 
         document.getElementById('userAvatarH').textContent  = rc.initials;
         document.getElementById('userNameH').textContent    = displayName;
         document.getElementById('userRoleH').textContent    = rc.label;
         document.getElementById('userDeptH').textContent    = department;
-
+ 
         updateNavVisibility(rc.pages);
         loadDashboardStats(db);
         loadPatients(db);
         loadAccounts(db);
         showPage('dashboard', document.querySelector('.nav-item.active'));
-
+ 
       } catch(e) {
         console.error('Firestore user load error:', e);
         showToast('Hiba a profil betöltésekor: ' + e.message, 'danger');
@@ -181,12 +204,12 @@ const app = initializeApp(firebaseConfig);
       resetLoginBtn();
     }
   });
-
+ 
   function resetLoginBtn() {
     const btn = document.getElementById('loginBtn');
     if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ti ti-login"></i> Belépés'; }
   }
-
+ 
   // ---- LOAD DASHBOARD STATS ----
   async function loadDashboardStats(db) {
     try {
@@ -194,7 +217,7 @@ const app = initializeApp(firebaseConfig);
       document.getElementById('statBeteg').textContent = pSnap.size;
     } catch(e) { console.warn('Stats load error', e); }
   }
-
+ 
   // ---- LOAD PATIENTS ----
   async function loadPatients(db) {
     const tbody = document.getElementById('patientsTbody');
@@ -232,7 +255,7 @@ const app = initializeApp(firebaseConfig);
       tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--danger);padding:32px;"><i class="ti ti-alert-triangle"></i> Nem sikerült betölteni: ${e.message}</td></tr>`;
     }
   }
-
+ 
   // ---- SAVE NEW PATIENT ----
   window.saveNewPatient = async function() {
     const fields = {
@@ -249,14 +272,14 @@ const app = initializeApp(firebaseConfig);
       status:    'aktiv',
       createdAt: serverTimestamp()
     };
-
+ 
     if (!fields.firstName || !fields.lastName || !fields.taj) {
       showToast('Keresztnév, vezetéknév és TAJ szám kötelező.', 'warn'); return;
     }
-
+ 
     const btn = document.getElementById('savePatientBtn');
     btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader spin"></i> Mentés...';
-
+ 
     try {
       await addDoc(collection(db, 'patients'), fields);
       closeModal('newPatientModal');
@@ -269,7 +292,7 @@ const app = initializeApp(firebaseConfig);
       btn.disabled = false; btn.innerHTML = '<i class="ti ti-check"></i> Beteg regisztrálása';
     }
   };
-
+ 
   // ---- LOAD ACCOUNTS ----
   async function loadAccounts(db) {
     const tbody = document.getElementById('accountsTbody');
@@ -298,7 +321,7 @@ const app = initializeApp(firebaseConfig);
       tbody.innerHTML = `<tr><td colspan="7" style="color:var(--danger);padding:16px;">Hiba: ${e.message}</td></tr>`;
     }
   }
-
+ 
   // ---- CREATE USER ACCOUNT ----
   // Megjegyzés: Firebase Auth-ban új felhasználót létrehozni csak Admin SDK-val lehet
   // (szerver oldali, pl. Cloud Functions). A frontend-en a createUserWithEmailAndPassword
@@ -308,9 +331,9 @@ const app = initializeApp(firebaseConfig);
   window.saveNewUser = function() {
     showToast('Felhasználó létrehozáshoz Firebase Admin SDK vagy Cloud Function szükséges. (Lásd kód komment)', 'warn');
   };
-
+ 
 </script>
-
+ 
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 :root {
@@ -339,11 +362,11 @@ body {
   display: flex;
   flex-direction: column;
 }
-
+ 
 /* ---- SPIN ANIMATION ---- */
 @keyframes spin { to { transform: rotate(360deg); } }
 .spin { animation: spin .7s linear infinite; display:inline-block; }
-
+ 
 /* ---- TOAST ---- */
 #toastContainer {
   position: fixed; bottom: 24px; right: 24px;
@@ -361,7 +384,7 @@ body {
 .toast.success { border-left: 3px solid var(--success); }
 .toast.danger  { border-left: 3px solid var(--danger); }
 .toast.warn    { border-left: 3px solid var(--warn); }
-
+ 
 /* ---- HEADER ---- */
 .header {
   background: var(--navy2);
@@ -397,10 +420,10 @@ body {
 }
 .user-role   { font-size: 11px; color: var(--muted); }
 .user-dept   { font-size: 10px; color: var(--muted); font-style: italic; }
-
+ 
 /* ---- LAYOUT ---- */
 .layout { display: flex; flex: 1; overflow: hidden; }
-
+ 
 /* ---- SIDEBAR ---- */
 .sidebar {
   width: 216px; background: var(--navy2);
@@ -444,12 +467,12 @@ body {
 }
 .sidebar-credit a { color: rgba(255,255,255,.25); text-decoration: none; }
 .sidebar-credit a:hover { color: var(--accent2); }
-
+ 
 /* ---- CONTENT ---- */
 .content { flex: 1; overflow-y: auto; padding: 24px; background: var(--navy); }
 .page { display: none; }
 .page.active { display: block; }
-
+ 
 /* ---- PAGE HEADER ---- */
 .page-header {
   display: flex; align-items: center; justify-content: space-between;
@@ -457,7 +480,7 @@ body {
 }
 .page-title   { font-size: 19px; font-weight: 700; }
 .page-subtitle{ font-size: 12px; color: var(--muted); margin-top: 3px; }
-
+ 
 /* ---- BUTTONS ---- */
 .btn {
   display: inline-flex; align-items: center; gap: 7px;
@@ -474,7 +497,7 @@ body {
 .btn-outline:hover { background: var(--surface2); }
 .btn-sm { padding: 5px 11px; font-size: 12px; }
 .btn-danger { background: rgba(217,79,78,.15); color: var(--danger); border: 1px solid rgba(217,79,78,.3); }
-
+ 
 /* ---- STATS ---- */
 .stats-grid {
   display: grid; grid-template-columns: repeat(4,1fr);
@@ -498,7 +521,7 @@ body {
 .stat-icon.danger { background: rgba(217,79,78,.15);   color: var(--danger); }
 .stat-val   { font-size: 26px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
 .stat-label { font-size: 12px; color: var(--muted); margin-top: 4px; }
-
+ 
 /* ---- CARD ---- */
 .card {
   background: var(--surface); border: 1px solid var(--border);
@@ -510,7 +533,7 @@ body {
 }
 .card-title { font-size: 13.5px; font-weight: 600; }
 .card-body  { padding: 17px; }
-
+ 
 /* ---- TABLE ---- */
 .table-wrap { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; }
@@ -526,7 +549,7 @@ td {
 }
 tr:last-child td { border-bottom: none; }
 tr:hover td { background: var(--surface2); }
-
+ 
 /* ---- BADGES ---- */
 .badge {
   display: inline-flex; align-items: center; gap: 4px;
@@ -539,7 +562,7 @@ tr:hover td { background: var(--surface2); }
 .badge-danger { background: rgba(217,79,78,.15);   color: #ee7070; }
 .badge-gray   { background: rgba(255,255,255,.07); color: var(--muted); }
 .badge-purple { background: rgba(100,90,220,.2);   color: #9f98f0; }
-
+ 
 /* ---- SEARCH ---- */
 .search-bar {
   display: flex; align-items: center; gap: 9px;
@@ -553,7 +576,7 @@ tr:hover td { background: var(--surface2); }
 }
 .search-bar input::placeholder { color: var(--muted); }
 .search-bar i { color: var(--muted); font-size: 15px; }
-
+ 
 /* ---- FORM ---- */
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .form-group { display: flex; flex-direction: column; gap: 5px; }
@@ -568,7 +591,7 @@ tr:hover td { background: var(--surface2); }
 .form-input:focus { border-color: var(--accent); }
 .form-input option { background: var(--navy2); }
 textarea.form-input { resize: vertical; min-height: 80px; line-height: 1.5; }
-
+ 
 /* ---- LOGIN ERROR ---- */
 .login-error {
   display: none; align-items: center; gap: 8px;
@@ -576,7 +599,7 @@ textarea.form-input { resize: vertical; min-height: 80px; line-height: 1.5; }
   border-radius: 9px; padding: 10px 14px;
   font-size: 13px; color: #ee7070;
 }
-
+ 
 /* ---- MODAL ---- */
 .modal-overlay {
   display: none; position: fixed; inset: 0;
@@ -607,7 +630,7 @@ textarea.form-input { resize: vertical; min-height: 80px; line-height: 1.5; }
   border-radius: 6px; display: flex; align-items: center;
 }
 .close-btn:hover { color: var(--text); background: var(--surface2); }
-
+ 
 /* ---- TABS ---- */
 .tab-bar {
   display: flex; gap: 2px; border-bottom: 1px solid var(--border);
@@ -624,7 +647,7 @@ textarea.form-input { resize: vertical; min-height: 80px; line-height: 1.5; }
 .tab-btn:hover:not(.active) { color: var(--text); }
 .tab-content { display: none; }
 .tab-content.active { display: block; }
-
+ 
 /* ---- ALERT ---- */
 .alert {
   padding: 11px 15px; border-radius: 8px;
@@ -632,7 +655,7 @@ textarea.form-input { resize: vertical; min-height: 80px; line-height: 1.5; }
   margin-bottom: 14px;
 }
 .alert-info { background: rgba(26,111,214,.1); border: 1px solid rgba(26,111,214,.3); color: #7ab8f5; }
-
+ 
 /* ---- ROLE GRID ---- */
 .role-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 9px; margin: 11px 0; }
 .role-card {
@@ -646,7 +669,7 @@ textarea.form-input { resize: vertical; min-height: 80px; line-height: 1.5; }
 .role-card.selected i { color: var(--accent2); }
 .role-card span { color: var(--text); font-weight: 600; display: block; }
 .role-card small { color: var(--muted); font-size: 10px; }
-
+ 
 /* ---- PATIENT HEADER ---- */
 .patient-header {
   display: flex; align-items: center; gap: 15px; padding: 18px;
@@ -662,7 +685,7 @@ textarea.form-input { resize: vertical; min-height: 80px; line-height: 1.5; }
 .info-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 14px; }
 .info-label { font-size: 10.5px; color: var(--muted); margin-bottom: 3px; }
 .info-val   { font-size: 13px; font-weight: 500; }
-
+ 
 /* ---- SECTION TITLE ---- */
 .section-title {
   font-size: 11px; font-weight: 700; color: var(--muted);
@@ -670,7 +693,7 @@ textarea.form-input { resize: vertical; min-height: 80px; line-height: 1.5; }
   margin: 18px 0 11px; padding-bottom: 6px;
   border-bottom: 1px solid var(--border);
 }
-
+ 
 /* ---- TIMELINE ---- */
 .timeline { list-style: none; }
 .timeline-item {
@@ -698,18 +721,18 @@ textarea.form-input { resize: vertical; min-height: 80px; line-height: 1.5; }
   line-height: 1.5; background: var(--surface);
   border: 1px solid var(--border); border-radius: 7px; padding: 9px;
 }
-
+ 
 /* ---- MISC ---- */
 .flex-row  { display: flex; align-items: center; gap: 10px; }
 .ml-auto   { margin-left: auto; }
 .text-muted{ color: var(--muted); font-size: 12px; }
 .divider   { height: 1px; background: var(--border); margin: 18px 0; }
-
+ 
 /* ---- SCROLLBAR ---- */
 ::-webkit-scrollbar { width: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(255,255,255,.1); border-radius: 10px; }
-
+ 
 /* ---- LOGIN SCREEN ---- */
 .login-screen {
   min-height: 100vh; display: flex; align-items: center; justify-content: center;
@@ -761,10 +784,10 @@ textarea.form-input { resize: vertical; min-height: 80px; line-height: 1.5; }
 </style>
 </head>
 <body>
-
+ 
 <!-- TOAST CONTAINER -->
 <div id="toastContainer"></div>
-
+ 
 <!-- LOGIN -->
 <div class="login-screen" id="loginScreen">
   <div class="login-box">
@@ -790,10 +813,10 @@ textarea.form-input { resize: vertical; min-height: 80px; line-height: 1.5; }
     </div>
   </div>
 </div>
-
+ 
 <!-- MAIN APP -->
 <div id="mainApp" style="display:none; flex-direction:column; min-height:100vh; flex:1;">
-
+ 
   <!-- HEADER -->
   <div class="header">
     <div class="logo-badge"><i class="ti ti-building-hospital"></i></div>
@@ -812,10 +835,10 @@ textarea.form-input { resize: vertical; min-height: 80px; line-height: 1.5; }
       <i class="ti ti-logout" style="color:var(--muted); font-size:15px; margin-left:4px;"></i>
     </div>
   </div>
-
+ 
   <!-- LAYOUT -->
   <div class="layout">
-
+ 
     <!-- SIDEBAR -->
     <div class="sidebar">
       <div class="nav-section-label">Főmenü</div>
@@ -861,10 +884,10 @@ textarea.form-input { resize: vertical; min-height: 80px; line-height: 1.5; }
         </div>
       </div>
     </div>
-
+ 
     <!-- CONTENT -->
     <div class="content">
-
+ 
       <!-- DASHBOARD -->
       <div class="page active" id="page-dashboard">
         <div class="page-header">
@@ -928,7 +951,7 @@ textarea.form-input { resize: vertical; min-height: 80px; line-height: 1.5; }
           </div>
         </div>
       </div>
-
+ 
       <!-- BETEG NYILVÁNTARTÁS -->
       <div class="page" id="page-patients">
         <div class="page-header">
@@ -966,7 +989,7 @@ textarea.form-input { resize: vertical; min-height: 80px; line-height: 1.5; }
           </div>
         </div>
       </div>
-
+ 
       <!-- AMBULÁNSLAP -->
       <div class="page" id="page-ambulans">
         <div class="page-header">
@@ -1047,7 +1070,7 @@ textarea.form-input { resize: vertical; min-height: 80px; line-height: 1.5; }
           </div>
         </div>
       </div>
-
+ 
       <!-- ZÁRÓJELENTÉS -->
       <div class="page" id="page-zarojelentes">
         <div class="page-header">
@@ -1067,7 +1090,7 @@ textarea.form-input { resize: vertical; min-height: 80px; line-height: 1.5; }
           </div>
         </div>
       </div>
-
+ 
       <!-- LABOR -->
       <div class="page" id="page-labor">
         <div class="page-header">
@@ -1086,7 +1109,7 @@ textarea.form-input { resize: vertical; min-height: 80px; line-height: 1.5; }
           </div>
         </div>
       </div>
-
+ 
       <!-- CT / RÖNTGEN -->
       <div class="page" id="page-kepalkoto">
         <div class="page-header">
@@ -1105,7 +1128,7 @@ textarea.form-input { resize: vertical; min-height: 80px; line-height: 1.5; }
           </div>
         </div>
       </div>
-
+ 
       <!-- BEUTALÓK -->
       <div class="page" id="page-beutalo">
         <div class="page-header">
@@ -1124,7 +1147,7 @@ textarea.form-input { resize: vertical; min-height: 80px; line-height: 1.5; }
           </div>
         </div>
       </div>
-
+ 
       <!-- FIÓKOK KEZELÉSE -->
       <div class="page" id="page-accounts">
         <div class="page-header">
@@ -1153,7 +1176,7 @@ textarea.form-input { resize: vertical; min-height: 80px; line-height: 1.5; }
           </div>
         </div>
       </div>
-
+ 
       <!-- AKTÁK -->
       <div class="page" id="page-aktak">
         <div class="page-header">
@@ -1194,11 +1217,11 @@ textarea.form-input { resize: vertical; min-height: 80px; line-height: 1.5; }
           </div>
         </div>
       </div>
-
+ 
     </div><!-- /content -->
   </div><!-- /layout -->
 </div><!-- /mainApp -->
-
+ 
 <!-- MODAL: ÚJ BETEG -->
 <div class="modal-overlay" id="newPatientModal">
   <div class="modal">
@@ -1226,7 +1249,7 @@ textarea.form-input { resize: vertical; min-height: 80px; line-height: 1.5; }
     </div>
   </div>
 </div>
-
+ 
 <!-- MODAL: ÚJ FELHASZNÁLÓ -->
 <div class="modal-overlay" id="newUserModal">
   <div class="modal">
@@ -1272,7 +1295,7 @@ textarea.form-input { resize: vertical; min-height: 80px; line-height: 1.5; }
     </div>
   </div>
 </div>
-
+ 
 <script>
 // ---- CLOCK ----
 function updateClock() {
@@ -1284,7 +1307,7 @@ function updateClock() {
     'Üdvözöljük! Ma ' +
     now.toLocaleDateString('hu-HU', {weekday:'long', year:'numeric', month:'long', day:'numeric'}) + '.';
 }
-
+ 
 // ---- NAV ----
 function updateNavVisibility(allowedPages) {
   const adminSection = document.querySelector('.admin-only');
@@ -1292,7 +1315,7 @@ function updateNavVisibility(allowedPages) {
     adminSection.style.display = allowedPages.includes('accounts') ? 'flex' : 'none';
   }
 }
-
+ 
 function showPage(id, el) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
@@ -1300,14 +1323,14 @@ function showPage(id, el) {
   if (page) page.classList.add('active');
   if (el) el.classList.add('active');
 }
-
+ 
 // ---- MODAL ----
 function showModal(id) { document.getElementById(id).classList.add('open'); }
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
 window.onclick = function(e) {
   if (e.target.classList.contains('modal-overlay')) e.target.classList.remove('open');
 };
-
+ 
 // ---- TABS ----
 function switchTab(btn, tabId) {
   const parent = btn.closest('.card-body') || btn.closest('.modal-body');
@@ -1316,13 +1339,13 @@ function switchTab(btn, tabId) {
   btn.classList.add('active');
   document.getElementById(tabId).classList.add('active');
 }
-
+ 
 // ---- ROLE CARD ----
 function selectRole(card) {
   card.closest('.role-grid').querySelectorAll('.role-card').forEach(c => c.classList.remove('selected'));
   card.classList.add('selected');
 }
-
+ 
 // ---- OPEN PATIENT ----
 window.openPatient = function(patientId) {
   showPage('ambulans', null);
@@ -1332,7 +1355,7 @@ window.openPatient = function(patientId) {
   });
   // TODO: töltsd be a beteg adatait Firestoreból a patientId alapján
 };
-
+ 
 // ---- TOAST ----
 window.showToast = function(msg, type = 'success') {
   const container = document.getElementById('toastContainer');
@@ -1346,7 +1369,7 @@ window.showToast = function(msg, type = 'success') {
   setTimeout(() => { toast.style.opacity='0'; toast.style.transition='opacity .3s';
     setTimeout(() => toast.remove(), 300); }, 3800);
 };
-
+ 
 // ---- PATIENT SEARCH ----
 document.addEventListener('DOMContentLoaded', () => {
   const searchEl = document.getElementById('patientSearch');
